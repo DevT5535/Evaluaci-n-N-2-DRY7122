@@ -1,0 +1,168 @@
+#Parte B
+import requests
+import urllib.parse
+
+
+# Configuración de la API
+url_ruta = "https://graphhopper.com/api/1/route?"
+clave_api = "ab404e69-2ec4-4ab9-9f0d-d32565d8553b"  # Reemplaza con tu clave real
+
+
+def geocodificar(ubicacion, clave):
+    """Convierte nombres de lugares a coordenadas geográficas"""
+    while ubicacion == "":
+        ubicacion = input("Por favor ingrese la ubicación nuevamente: ")
+    
+    url_geocodificacion = "https://graphhopper.com/api/1/geocode?"
+    parametros = {"q": ubicacion, "limit": "1", "key": clave}
+    url = url_geocodificacion + urllib.parse.urlencode(parametros)
+
+
+    try:
+        respuesta = requests.get(url)
+        datos = respuesta.json()
+        
+        if respuesta.status_code == 200 and datos.get("hits"):
+            latitud = datos["hits"][0]["point"]["lat"]
+            longitud = datos["hits"][0]["point"]["lng"]
+            nombre = datos["hits"][0]["name"]
+            
+            pais = datos["hits"][0].get("country", "")
+            region = datos["hits"][0].get("state", "")
+            
+            if region and pais:
+                ubicacion_formateada = f"{nombre}, {region}, {pais}"
+            elif pais:
+                ubicacion_formateada = f"{nombre}, {pais}"
+            else:
+                ubicacion_formateada = nombre
+            
+            return respuesta.status_code, latitud, longitud, ubicacion_formateada
+        else:
+            print(f"\nError: No se encontró la ubicación '{ubicacion}'")
+            return respuesta.status_code, None, None, ubicacion
+    except Exception as e:
+        print(f"\nError de conexión: {str(e)}")
+        return 500, None, None, ubicacion
+
+
+def calcular_combustible(distancia_km):
+    """Calcula el combustible necesario (12 km por litro)"""
+    return distancia_km / 12.0
+
+
+def formatear_duracion(segundos):
+    """Convierte segundos a horas, minutos y segundos"""
+    horas = int(segundos // 3600)
+    minutos = int((segundos % 3600) // 60)
+    segundos = int(segundos % 60)
+    return horas, minutos, segundos
+
+
+def mostrar_resultados(origen, destino, distancia, duracion, combustible):
+    """Muestra los resultados del cálculo de ruta"""
+    print("\n" + "="*60)
+    print("📝 RESUMEN DEL VIAJE".center(60))
+    print("="*60)
+    print(f"🔹 Origen: {origen}")
+    print(f"🔹 Destino: {destino}")
+    print(f"📏 Distancia total: {distancia:.2f} km")
+    
+    horas, minutos, segundos = formatear_duracion(duracion)
+    print(f⏱️ Duración estimada: {horas:02d}h {minutos:02d}m {segundos:02d}s")
+    
+    print(f"⛽ Combustible necesario: {combustible:.2f} litros (a 12 km/l)")
+    print("="*60)
+
+
+def mostrar_instrucciones(ruta):
+    """Muestra las instrucciones de navegación paso a paso"""
+    print("\n📌 INSTRUCCIONES DE RUTA:")
+    for paso in ruta["paths"][0]["instructions"]:
+        distancia_km = paso["distance"] / 1000
+        print(f"- {paso['text']} ({distancia_km:.2f} km)")
+    print("="*60)
+
+
+def main():
+    print("\n" + "="*60)
+    print("🚗 CALCULADOR DE VIAJES".center(60))
+    print("="*60)
+    print("Este programa calcula:")
+    print("- Distancia entre ciudades")
+    print("- Duración del viaje")
+    print("- Combustible requerido")
+    print("\nInstrucciones:")
+    print("1. Ingrese ciudad de origen y destino")
+    print("2. Presione 'q' para salir en cualquier momento")
+    print("="*60)
+
+
+    while True:
+        # Entrada de origen
+        origen_input = input("\n🏠 Ciudad de Origen (o 'q' para salir): ").strip()
+        if origen_input.lower() == 'q':
+            break
+        
+        # Geocodificación de origen
+        estado_origen, lat_origen, lon_origen, origen_nombre = geocodificar(origen_input, clave_api)
+        if estado_origen != 200:
+            print("No se pudo procesar el origen. Intente nuevamente.")
+            continue
+
+
+        # Entrada de destino
+        destino_input = input("🏁 Ciudad de Destino (o 'q' para salir): ").strip()
+        if destino_input.lower() == 'q':
+            break
+        
+        # Geocodificación de destino
+        estado_destino, lat_destino, lon_destino, destino_nombre = geocodificar(destino_input, clave_api)
+        if estado_destino != 200:
+            print("No se pudo procesar el destino. Intente nuevamente.")
+            continue
+
+
+        # Construcción de URL para la API de rutas
+        parametros_ruta = {
+            "key": clave_api,
+            "vehicle": "car",
+            "point": [f"{lat_origen},{lon_origen}", f"{lat_destino},{lon_destino}"]
+        }
+        url = url_ruta + urllib.parse.urlencode(parametros_ruta, doseq=True)
+
+
+        try:
+            respuesta = requests.get(url)
+            datos_ruta = respuesta.json()
+            
+            if respuesta.status_code == 200:
+                # Cálculos principales
+                distancia_km = datos_ruta["paths"][0]["distance"] / 1000
+                duracion_seg = datos_ruta["paths"][0]["time"] / 1000
+                combustible = calcular_combustible(distancia_km)
+                
+                # Mostrar resultados
+                mostrar_resultados(origen_nombre, destino_nombre, distancia_km, duracion_seg, combustible)
+                mostrar_instrucciones(datos_ruta)
+            else:
+                print(f"\nError al calcular la ruta: {datos_ruta.get('message', 'Error desconocido')}")
+        except Exception as e:
+            print(f"\nError de conexión: {str(e)}")
+        
+        # Consultar por otra ruta
+        otra_ruta = input("\n¿Desea calcular otra ruta? (s/n): ").lower()
+        if otra_ruta != 's':
+            break
+
+
+    print("\n¡Gracias por usar el calculador de viajes!  ")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nPrograma interrumpido por el usuario")
+    except Exception as e:
+        print(f"\nError inesperado: {str(e)}")
